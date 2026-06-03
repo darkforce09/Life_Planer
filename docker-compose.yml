@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  postgres:
+    # Using ankane/pgvector which is the official recommended image for pgvector
+    image: ankane/pgvector:latest
+    container_name: life_planner_db
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: life_planner
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  pgdata:
