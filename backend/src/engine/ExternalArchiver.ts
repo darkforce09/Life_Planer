@@ -31,6 +31,28 @@ export class ExternalArchiver {
     }
 
     /**
+     * Locates the yt-dlp binary. Prefers an explicit YT_DLP_PATH, then a binary
+     * next to the app, then common system install locations, and finally falls
+     * back to a bare `yt-dlp` so the system PATH is used.
+     */
+    private resolveYtDlp(): string {
+        const candidates = [
+            process.env.YT_DLP_PATH,
+            path.resolve(process.cwd(), 'yt-dlp'),
+            '/usr/local/bin/yt-dlp',
+            '/usr/bin/yt-dlp',
+        ].filter((c): c is string => Boolean(c));
+        for (const candidate of candidates) {
+            try {
+                if (fs.existsSync(candidate)) return candidate;
+            } catch {
+                // ignore and keep looking
+            }
+        }
+        return 'yt-dlp';
+    }
+
+    /**
      * Downloads YouTube or Vimeo videos using yt-dlp.
      */
     async downloadVideo(url: string, targetDir: string, title?: string): Promise<string | null> {
@@ -40,7 +62,7 @@ export class ExternalArchiver {
             
             logger.info(`[EXTERNAL-ARCHIVER] Downloading external video: ${url}`);
             
-            const ytDlpPath = path.resolve(process.cwd(), 'yt-dlp');
+            const ytDlpPath = this.resolveYtDlp();
             const cmd = `"${ytDlpPath}" --no-warnings -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" -o "${outputPath}" "${url}"`;
             
             await execAsync(cmd);

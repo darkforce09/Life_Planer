@@ -71,14 +71,21 @@ const TOOLS: AgentTool[] = [
   {
     declaration: {
       name: 'request_email_send',
-      description: 'Request human approval to SEND a drafted email. Blocks until the user decides.',
+      description:
+        'Request human approval to SEND a drafted email, then send it once approved. ' +
+        'Pass the draftId returned by draft_email. Blocks until the user decides.',
       parameters: {
         type: Type.OBJECT,
-        properties: { to: { type: Type.STRING }, subject: { type: Type.STRING } },
+        properties: {
+          to: { type: Type.STRING },
+          subject: { type: Type.STRING },
+          draftId: { type: Type.STRING },
+        },
         required: ['to', 'subject'],
       },
     },
-    handler: async (args) => requestEmailSend(String(args.to), String(args.subject)),
+    handler: async (args) =>
+      requestEmailSend(String(args.to), String(args.subject), args.draftId ? String(args.draftId) : undefined),
   },
   {
     declaration: {

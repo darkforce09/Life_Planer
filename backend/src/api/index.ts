@@ -151,6 +151,11 @@ app.post('/api/canvas/deep-sync', async (req, res) => {
           await bot.runScraper(username, password, courseFilters);
         });
         await run.stage('transcribe', async () => {
+          if (!process.env.GROQ_API_KEY) {
+            logger.warn('[API] GROQ_API_KEY not set; skipping transcription stage.');
+            await recordAlert('Transcription skipped: GROQ_API_KEY not configured.', 'info', 'pipeline');
+            return;
+          }
           await new TranscriptionEngine().transcribeAll();
         });
         await run.stage('parse-documents', async () => {

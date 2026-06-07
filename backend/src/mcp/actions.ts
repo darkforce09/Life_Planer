@@ -31,11 +31,13 @@ export function buildActionsServer(): McpServer {
   server.registerTool(
     'request_email_send',
     {
-      description: 'Request human approval to SEND an email. Blocks until the user decides.',
-      inputSchema: { to: z.string(), subject: z.string() },
+      description:
+        'Request human approval to SEND an email, then send it once approved. ' +
+        'Pass the draftId returned by draft_email. Blocks until the user decides.',
+      inputSchema: { to: z.string(), subject: z.string(), draftId: z.string().optional() },
     },
-    async ({ to, subject }) => ({
-      content: [{ type: 'text', text: JSON.stringify(await requestEmailSend(to, subject)) }],
+    async ({ to, subject, draftId }) => ({
+      content: [{ type: 'text', text: JSON.stringify(await requestEmailSend(to, subject, draftId)) }],
     }),
   );
 

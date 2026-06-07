@@ -7,7 +7,7 @@ import { RAGQueryEngine } from '../engine/RAGQueryEngine.js';
 import { syncTimeEdit } from '../sensors/TimeEditService.js';
 import { syncCanvas } from '../sensors/CanvasService.js';
 import { syncLadok, signUpForLadokExam } from '../sensors/LadokBot.js';
-import { syncOutlook } from '../sensors/OutlookIntegrationService.js';
+import { syncOutlook, sendOutlookDraft } from '../sensors/OutlookIntegrationService.js';
 import { draftApologyEmail } from './EmailAgent.js';
 import { requestApproval, waitForApproval } from './approvals.js';
 import { recordAlert } from '../utils/alerts.js';
@@ -110,13 +110,30 @@ export async function draftEmail(
 }
 
 /**
- * Requests human approval to send an email, then waits for the decision.
- * Returns whether sending was approved (the caller performs the actual send).
+ * Requests human approval to send an email, then - once approved - actually
+ * sends the previously created Outlook draft. Pass the `draftId` returned by
+ * `draftEmail` so the approved send can be carried out end-to-end.
  */
-export async function requestEmailSend(to: string, subject: string): Promise<{ approved: boolean; approvalId: string }> {
-  const approvalId = await requestApproval('send_email', `Send email: ${subject}`, { to, subject });
+export async function requestEmailSend(
+  to: string,
+  subject: string,
+  draftId?: string,
+): Promise<{ approved: boolean; sent: boolean; approvalId: string; message: string }> {
+  const approvalId = await requestApproval('send_email', `Send email: ${subject}`, { to, subject, draftId });
   const status = await waitForApproval(approvalId);
-  return { approved: status === 'approved', approvalId };
+  if (status !== 'approved') {
+    return { approved: false, sent: false, approvalId, message: 'Email send was not approved.' };
+  }
+  if (!draftId) {
+    return { approved: true, sent: false, approvalId, message: 'Approved, but no Outlook draft id was provided to send.' };
+  }
+  const outlook = await getSensorConfig<{ graphApiToken?: string }>('outlook');
+  if (!outlook?.graphApiToken) {
+    return { approved: true, sent: false, approvalId, message: 'Approved, but Outlook is not configured.' };
+  }
+  await sendOutlookDraft({ name: 'outlook', graphApiToken: outlook.graphApiToken }, draftId);
+  logger.info(`[TOOLS] Email draft ${draftId} sent (approval ${approvalId}).`);
+  return { approved: true, sent: true, approvalId, message: 'Email sent.' };
 }
 
 /**
