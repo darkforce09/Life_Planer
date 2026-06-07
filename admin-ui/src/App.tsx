@@ -1,9 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Activity, Database, Terminal, RefreshCw, Clock, Calendar, Hash, Save, Settings, Search } from 'lucide-react';
+import { Activity, Database, Terminal, RefreshCw, Clock, Calendar, Hash, Save, Settings, Search, AlertTriangle, ShieldCheck, Bot, Mail } from 'lucide-react';
 import './index.css';
 import { RagPanel } from './RagPanel';
 import { CalendarPanel } from './CalendarPanel';
+import { PipelineAlertsPanel } from './PipelineAlertsPanel';
+import { ApprovalsPanel } from './ApprovalsPanel';
+import { AgentsPanel } from './AgentsPanel';
 import { apiFetch } from './api';
+
+type AppView = 'DASHBOARD' | 'TIMEEDIT' | 'CANVAS' | 'LADOK' | 'RAG' | 'CALENDAR' | 'OPERATIONS' | 'APPROVALS' | 'AGENTS' | 'OUTLOOK';
 
 function getRelativeTimeString(dateString: string) {
   const date = new Date(dateString);
@@ -78,7 +83,7 @@ function formatForInput(dateStr: string) {
 }
 
 function App() {
-  const [currentView, setCurrentView] = useState<'DASHBOARD' | 'TIMEEDIT' | 'CANVAS' | 'LADOK' | 'RAG' | 'CALENDAR'>('DASHBOARD');
+  const [currentView, setCurrentView] = useState<AppView>('DASHBOARD');
   
   const [health, setHealth] = useState<any>(null);
   const [tasks, setTasks] = useState<any[]>([]);
@@ -89,8 +94,11 @@ function App() {
   const [timeEditConfig, setTimeEditConfig] = useState<any>({ url: '' });
   const [savingConfig, setSavingConfig] = useState(false);
   
-  const [canvasConfig, setCanvasConfig] = useState<any>({ url: '', token: '' });
+  const [canvasConfig, setCanvasConfig] = useState<any>({ url: '' });
+  const [canvasScrapeConfig, setCanvasScrapeConfig] = useState<{ courseFilters: string }>({ courseFilters: '' });
   const [savingCanvasConfig, setSavingCanvasConfig] = useState(false);
+  const [outlookConfig, setOutlookConfig] = useState<{ graphApiToken: string }>({ graphApiToken: '' });
+  const [savingOutlookConfig, setSavingOutlookConfig] = useState(false);
   
   const [ladokCreds, setLadokCreds] = useState({ username: '', password: '' });
   const [savingLadokCreds, setSavingLadokCreds] = useState(false);
@@ -168,9 +176,61 @@ function App() {
     try {
       const res = await apiFetch('/api/sensors/canvas/config');
       if(res.ok) setCanvasConfig(await res.json());
+      const scrapeRes = await apiFetch('/api/sensors/canvas_scrape/config');
+      if (scrapeRes.ok) {
+        const data = await scrapeRes.json();
+        const filters = Array.isArray(data.courseFilters) ? data.courseFilters.join(', ') : '';
+        setCanvasScrapeConfig({ courseFilters: filters });
+      }
     } catch (e) {
       console.error('Failed to fetch Canvas config', e);
     }
+  };
+
+  const saveCanvasScrapeConfig = async () => {
+    setSavingCanvasConfig(true);
+    try {
+      const courseFilters = canvasScrapeConfig.courseFilters
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      await apiFetch('/api/sensors/canvas_scrape/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ courseFilters }),
+      });
+      alert('Deep sync course filters saved!');
+    } catch {
+      alert('Failed to save course filters.');
+    }
+    setSavingCanvasConfig(false);
+  };
+
+  const fetchOutlookConfig = async () => {
+    try {
+      const res = await apiFetch('/api/sensors/outlook/config');
+      if (res.ok) {
+        const data = await res.json();
+        setOutlookConfig({ graphApiToken: data.graphApiToken || '' });
+      }
+    } catch (e) {
+      console.error('Failed to fetch Outlook config', e);
+    }
+  };
+
+  const saveOutlookConfig = async () => {
+    setSavingOutlookConfig(true);
+    try {
+      await apiFetch('/api/sensors/outlook/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(outlookConfig),
+      });
+      alert('Outlook configuration saved!');
+    } catch {
+      alert('Failed to save Outlook config.');
+    }
+    setSavingOutlookConfig(false);
   };
 
   const saveCanvasConfig = async () => {
@@ -435,11 +495,25 @@ function App() {
               {health?.sensors.timeedit || 'UNKNOWN'}
             </span>
           </div>
-          <div className="telemetry-item">
-            <span>Outlook Integration</span>
+          <div className="telemetry-item" onClick={() => { setCurrentView('OUTLOOK'); fetchOutlookConfig(); }} style={{cursor: 'pointer', background: currentView === 'OUTLOOK' ? 'rgba(255,255,255,0.05)' : ''}}>
+            <span><Mail size={14} /> Outlook Integration</span>
             <span className={`status-badge status-${health?.sensors.outlook || 'pending'}`}>
               {health?.sensors.outlook || 'UNKNOWN'}
             </span>
+          </div>
+          <div className="telemetry-item" onClick={() => setCurrentView('OPERATIONS')} style={{cursor: 'pointer', background: currentView === 'OPERATIONS' ? 'rgba(255,255,255,0.05)' : ''}}>
+            <span><AlertTriangle size={14} /> Pipeline & Alerts</span>
+            <span className={`status-badge status-${health?.pipeline?.active ? 'pending' : 'ok'}`}>
+              {health?.pipeline?.active ? 'RUNNING' : 'IDLE'}
+            </span>
+          </div>
+          <div className="telemetry-item" onClick={() => setCurrentView('APPROVALS')} style={{cursor: 'pointer', background: currentView === 'APPROVALS' ? 'rgba(255,255,255,0.05)' : ''}}>
+            <span><ShieldCheck size={14} /> Approvals</span>
+            <span className="status-badge status-ok">REVIEW</span>
+          </div>
+          <div className="telemetry-item" onClick={() => setCurrentView('AGENTS')} style={{cursor: 'pointer', background: currentView === 'AGENTS' ? 'rgba(255,255,255,0.05)' : ''}}>
+            <span><Bot size={14} /> Agents</span>
+            <span className="status-badge status-ok">TRACE</span>
           </div>
           <div className="telemetry-item" onClick={() => setCurrentView('RAG')} style={{cursor: 'pointer', background: currentView === 'RAG' ? 'rgba(255,255,255,0.05)' : ''}}>
             <span><Search size={14} /> Knowledge Base</span>
@@ -455,7 +529,18 @@ function App() {
       {/* MAIN CONTENT AREA */}
       <div className="app-main">
         <div className="topbar" style={{justifyContent: 'space-between', display: 'flex', width: '100%'}}>
-          <h2 style={{margin: 0}}>{currentView === 'TIMEEDIT' ? 'TimeEdit Integration settings' : currentView === 'CANVAS' ? 'Canvas Integration settings' : currentView === 'LADOK' ? 'Ladok Course Sync' : currentView === 'RAG' ? 'Knowledge Base' : currentView === 'CALENDAR' ? 'Calendar' : 'Global Dashboard'}</h2>
+          <h2 style={{margin: 0}}>{
+            currentView === 'TIMEEDIT' ? 'TimeEdit Integration settings' :
+            currentView === 'CANVAS' ? 'Canvas Integration settings' :
+            currentView === 'LADOK' ? 'Ladok Course Sync' :
+            currentView === 'RAG' ? 'Knowledge Base' :
+            currentView === 'CALENDAR' ? 'Calendar' :
+            currentView === 'OPERATIONS' ? 'Pipeline & Alerts' :
+            currentView === 'APPROVALS' ? 'Approvals' :
+            currentView === 'AGENTS' ? 'Agents' :
+            currentView === 'OUTLOOK' ? 'Outlook Integration' :
+            'Global Dashboard'
+          }</h2>
           <button className="btn-primary" onClick={triggerSync} disabled={syncing}>
             <RefreshCw size={16} className={syncing ? 'spinning' : ''} />
             {syncing ? 'Synchronize All Sensors' : 'Trigger Sync'}
@@ -464,6 +549,33 @@ function App() {
 
         {currentView === 'RAG' && <RagPanel />}
         {currentView === 'CALENDAR' && <CalendarPanel />}
+        {currentView === 'OPERATIONS' && <PipelineAlertsPanel />}
+        {currentView === 'APPROVALS' && <ApprovalsPanel />}
+        {currentView === 'AGENTS' && <AgentsPanel />}
+
+        {currentView === 'OUTLOOK' && (
+          <div className="panel" style={{marginBottom: 24}}>
+            <h2 className="panel-title"><Settings size={18} /> Outlook Configuration</h2>
+            <div style={{display: 'flex', flexDirection: 'column', gap: 16}}>
+              <div>
+                <label className="input-label">Microsoft Graph API Token</label>
+                <textarea
+                  className="drawer-input"
+                  rows={4}
+                  placeholder="Paste a valid Graph access token..."
+                  value={outlookConfig.graphApiToken}
+                  onChange={(e) => setOutlookConfig({ graphApiToken: e.target.value })}
+                />
+                <p style={{fontSize: 12, color: 'var(--text-secondary)', marginTop: 8}}>
+                  Used to sync flagged emails and calendar events into tasks. Acquire via the MS identity platform.
+                </p>
+              </div>
+              <button className="btn-success" onClick={saveOutlookConfig} disabled={savingOutlookConfig}>
+                {savingOutlookConfig ? 'Saving...' : 'Save Configuration'}
+              </button>
+            </div>
+          </div>
+        )}
 
         {currentView === 'TIMEEDIT' && (
           <div className="panel" style={{marginBottom: 24}}>
@@ -522,6 +634,21 @@ function App() {
               <p style={{fontSize: 14, color: 'var(--text-secondary)'}}>
                 Instead of just extracting assignments from the calendar feed, the <strong>Deep Sync</strong> uses your Miun credentials (configured in the Ladok tab) to log into Canvas natively. It will scrape all active courses, download PDFs/PowerPoints, and convert Canvas text pages into Markdown files.
               </p>
+              <div>
+                <label className="input-label">Course filters (optional, comma-separated)</label>
+                <input
+                  className="drawer-input"
+                  placeholder="e.g. MV038G, MV039G"
+                  value={canvasScrapeConfig.courseFilters}
+                  onChange={(e) => setCanvasScrapeConfig({ courseFilters: e.target.value })}
+                />
+                <p style={{fontSize: 12, color: 'var(--text-secondary)', marginTop: 8}}>
+                  Leave blank to scrape all courses. Filters match course codes or name substrings.
+                </p>
+              </div>
+              <button className="btn-success" onClick={saveCanvasScrapeConfig} disabled={savingCanvasConfig}>
+                {savingCanvasConfig ? 'Saving...' : 'Save Course Filters'}
+              </button>
               <div style={{display: 'flex', gap: 12}}>
                 <button className="btn-primary" onClick={triggerCanvasDeepSync} disabled={scrapingExams} style={{backgroundColor: '#2196f3'}}>
                   {scrapingExams ? 'Starting...' : 'Run Deep Sync'}
@@ -821,7 +948,7 @@ function App() {
             </>
           )}
 
-          {currentView !== 'LADOK' && (
+          {currentView !== 'LADOK' && currentView !== 'OPERATIONS' && currentView !== 'APPROVALS' && currentView !== 'AGENTS' && currentView !== 'OUTLOOK' && currentView !== 'RAG' && currentView !== 'CALENDAR' && (
             <div className="panel" style={{flex: 1}}>
               <div className="list-header">
               <h2 className="panel-title" style={{marginBottom: 0}}>
@@ -885,6 +1012,17 @@ function App() {
                           />
                         </div>
                         
+                        <div className="drawer-section">
+                          <label className="input-label" style={{display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer'}}>
+                            <input
+                              type="checkbox"
+                              checked={!!editTask.isCompleted}
+                              onChange={(e) => setEditTask({ ...editTask, isCompleted: e.target.checked, status: e.target.checked ? 'completed' : 'pending' })}
+                            />
+                            Mark as completed
+                          </label>
+                        </div>
+
                         <div className="drawer-meta-grid" style={{marginBottom: 16}}>
                           <div className="meta-block">
                             <label className="input-label"><Hash size={14}/> Priority Score</label>

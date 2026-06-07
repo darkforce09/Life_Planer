@@ -45,6 +45,62 @@ async function authenticate(username: string, password: string): Promise<{ brows
     return { browser, page };
 }
 
+function parseLadokExamDate(raw: string): Date | null {
+    const isoMatch = (raw || '').match(/\d{4}-\d{2}-\d{2}/);
+    if (isoMatch) {
+        const parsed = new Date(isoMatch[0]);
+        if (!isNaN(parsed.getTime())) return parsed;
+    }
+    return null;
+}
+
+function extractExaminationDateText(bodyText: string): string {
+    const match = bodyText.match(
+        /(?:Date of examination|Examination date|Tentamensdatum|Tentamen|Examination)\s*\n?\s*(.+?)(?:\n|Sign up|Anmäln|Type|Typ|$)/i,
+    );
+    return match ? match[1].trim() : '';
+}
+
+/** Expands each Ladok module card and reads the examination date when present. */
+async function captureModuleExamDates(page: Page): Promise<Map<string, Date | null>> {
+    const dates = new Map<string, Date | null>();
+    const kortCount = await page.locator('ladok-list-kort').count();
+
+    for (let i = 0; i < kortCount; i++) {
+        const kort = page.locator('ladok-list-kort').nth(i);
+        const titleText =
+            (await kort.locator('.ladok-list-kort-header-rubrik').textContent().catch(() => ''))?.trim() || '';
+        const moduleMatch = titleText.match(/(.+) - ([0-9]{4})$/);
+        if (!moduleMatch) continue;
+
+        const moduleCode = moduleMatch[2].trim();
+        let examDateText = '';
+
+        const showMoreBtn = kort
+            .locator('ladok-visa-mer button, button[name="Show more"], button[name="Visa mer"]')
+            .first();
+        if ((await showMoreBtn.count()) > 0) {
+            await showMoreBtn.click();
+            await page.waitForTimeout(400);
+            const bodyText =
+                (await kort.locator('.card-body, ladok-list-kort-body').first().textContent().catch(() => '')) || '';
+            examDateText = extractExaminationDateText(bodyText);
+
+            const showLessBtn = kort
+                .locator('ladok-visa-mindre button, button[name="Show less"], button[name="Visa mindre"]')
+                .first();
+            if ((await showLessBtn.count()) > 0) {
+                await showLessBtn.click();
+                await page.waitForTimeout(200);
+            }
+        }
+
+        dates.set(moduleCode, parseLadokExamDate(examDateText));
+    }
+
+    return dates;
+}
+
 export async function syncLadok(username?: string, password?: string): Promise<boolean> {
     logger.info('[SENSOR-LADOK] Starting REAL Playwright Headless Sync...');
     
@@ -106,13 +162,13 @@ export async function syncLadok(username?: string, password?: string): Promise<b
                         const badgeEl = kort.querySelector('ladok-betygs-badge .badge');
                         const grade = badgeEl ? badgeEl.textContent?.trim() : 'Not specified';
                         
-                        // Examination date requires expanding the accordion; not captured yet.
                         modules.push({ name, moduleCode, credits, grade });
                     }
                 }
                 return { courseName: headerText, courseCode, modules };
             });
 
+            const examDates = await captureModuleExamDates(page);
             logger.info(`[SENSOR-LADOK] Parsed ${courseData.courseCode} with ${courseData.modules.length} modules`);
 
             if (courseData.courseCode !== 'UNKNOWN') {
@@ -139,7 +195,7 @@ export async function syncLadok(username?: string, password?: string): Promise<b
                             name: m.name,
                             credits: m.credits,
                             grade: m.grade,
-                            examinationDate: null
+                            examinationDate: examDates.get(m.moduleCode) ?? null
                         }))
                     );
                 }

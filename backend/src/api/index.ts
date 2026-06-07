@@ -4,8 +4,8 @@ import { db } from '../db/index.js';
 import { users, courses, courseModules, sensorConfigs, tasks, exams, documentChunks, events } from '../db/schema.js';
 import { logger } from '../utils/logger.js';
 import { desc, eq, sql } from 'drizzle-orm';
-import { syncTimeEdit, TimeEditConfig } from '../sensors/TimeEditService.js';
-import { syncCanvas, CanvasConfig } from '../sensors/CanvasService.js';
+import { syncTimeEdit, TimeEditConfig, checkTimeEditHealth } from '../sensors/TimeEditService.js';
+import { syncCanvas, CanvasConfig, checkCanvasHealth } from '../sensors/CanvasService.js';
 import { syncLadok, scrapeLadokExams, signUpForLadokExam } from '../sensors/LadokBot.js';
 import { syncOutlook, checkOutlookHealth } from '../sensors/OutlookIntegrationService.js';
 import { CanvasBot } from '../sensors/CanvasBot.js';
@@ -360,11 +360,23 @@ app.get('/api/events', async (req, res) => {
 // API: System Health Check & Telemetry
 app.get('/api/health', async (req, res) => {
   const [timeedit, canvas, ladok, outlook] = await Promise.all([
-    getSensorConfig('timeedit'),
-    getSensorConfig('canvas'),
+    getSensorConfig<{ url?: string }>('timeedit'),
+    getSensorConfig<{ url?: string }>('canvas'),
     getSensorConfig('ladok'),
     getSensorConfig<{ graphApiToken?: string }>('outlook'),
   ]);
+
+  let timeeditStatus: string = 'pending';
+  if (timeedit?.url) {
+    timeeditStatus = (await checkTimeEditHealth({ name: 'timeedit', icsUrl: timeedit.url, userId: '' }))
+      ? 'ok'
+      : 'error';
+  }
+
+  let canvasStatus: string = 'pending';
+  if (canvas?.url) {
+    canvasStatus = (await checkCanvasHealth({ name: 'canvas', icsUrl: canvas.url })) ? 'ok' : 'error';
+  }
 
   let outlookStatus: string = outlook?.graphApiToken ? 'configured' : 'pending';
   if (outlook?.graphApiToken) {
@@ -380,8 +392,8 @@ app.get('/api/health', async (req, res) => {
     status: 'healthy',
     timestamp: new Date(),
     sensors: {
-      timeedit: timeedit ? 'ok' : 'pending',
-      canvas: canvas ? 'ok' : 'pending',
+      timeedit: timeeditStatus,
+      canvas: canvasStatus,
       ladok: ladok ? 'configured' : 'pending',
       outlook: outlookStatus,
     },
@@ -399,7 +411,7 @@ app.get('/api/health', async (req, res) => {
       })),
     },
     alerts: recentAlerts.filter((a) => !a.acknowledged),
-    recentLogs: [],
+    recentLogs: adminLogs.slice(0, 50),
   });
 });
 

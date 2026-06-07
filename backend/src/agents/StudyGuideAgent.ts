@@ -1,5 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { logger } from '../utils/logger.js';
+import { RAGQueryEngine } from '../engine/RAGQueryEngine.js';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -27,9 +28,26 @@ This is an auto-generated, highly prioritized study guide created by the Autonom
 
 export async function generateGuide(context: StudyGuideAgentContext, courseName: string, topic: string): Promise<void> {
   logger.info(`[AGENT-STUDYGUIDE] Beginning synthesis for ${courseName}: ${topic}`);
-  
-  // In production, this would query the RAGService/pgvector for syllabus context
-  const prompt = `Act as an elite university tutor. Generate a comprehensive Markdown study guide for the course ${courseName} on the topic of "${topic}". Include key concepts, practice questions, and summary points.`;
+
+  let ragContext = '';
+  try {
+    const matches = await new RAGQueryEngine().search(`${courseName} ${topic}`, { topK: 6 });
+    if (matches.length > 0) {
+      ragContext =
+        '\n\nRelevant course materials from the knowledge base:\n' +
+        matches.map((m) => `- ${m.content}`).join('\n');
+      logger.info(`[AGENT-STUDYGUIDE] Retrieved ${matches.length} RAG chunks for context.`);
+    }
+  } catch (error) {
+    logger.warn({ err: error }, '[AGENT-STUDYGUIDE] RAG search failed; continuing without context.');
+  }
+
+  const prompt =
+    `Act as an elite university tutor. Generate a comprehensive Markdown study guide for the course ${courseName} on the topic of "${topic}". ` +
+    `Include key concepts, practice questions, and summary points.` +
+    (ragContext
+      ? `${ragContext}\n\nGround the guide in the course materials above. Do not invent facts not supported by them.`
+      : '');
 
   let content = '';
 
