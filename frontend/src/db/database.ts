@@ -1,5 +1,6 @@
 import * as SQLite from 'expo-sqlite';
 import { Platform } from 'react-native';
+import { apiFetch } from '../config';
 
 export async function getDatabase(): Promise<any> {
   if (Platform.OS === 'web') {
@@ -28,7 +29,7 @@ export async function getDatabase(): Promise<any> {
  */
 export async function syncTasksFromServer() {
   try {
-    const response = await fetch('http://localhost:3000/api/tasks');
+    const response = await apiFetch('/api/tasks');
     if (!response.ok) throw new Error('Network error');
     
     const tasks = await response.json();
@@ -48,5 +49,20 @@ export async function syncTasksFromServer() {
   } catch (error) {
     console.warn('[OFFLINE MODE] Could not reach Node.js server. Using local SQLite cache.');
     return null;
+  }
+}
+
+/**
+ * Marks a task complete/incomplete on the server. Returns true on success.
+ */
+export async function setTaskCompletion(id: string, isCompleted: boolean): Promise<boolean> {
+  try {
+    const response = await apiFetch(`/api/tasks/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ isCompleted }),
+    });
+    return response.ok;
+  } catch {
+    return false;
   }
 }

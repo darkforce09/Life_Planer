@@ -2,15 +2,17 @@ import React from 'react';
 import { render } from '@testing-library/react-native';
 import { TaskWidget } from './TaskWidget';
 
-// Mock the SQLite database wrapper
-jest.mock('../db/database', () => ({
-  getDatabase: jest.fn().mockResolvedValue({
-    getAllAsync: jest.fn().mockResolvedValue([
-      { id: '1', title: 'Test Mock Task', priorityScore: 50 }
-    ])
-  }),
-  syncTasksFromServer: jest.fn().mockResolvedValue(true)
-}));
+// Mock the SQLite database wrapper. syncTasksFromServer must resolve to an
+// array of tasks (the component sets that directly into state).
+jest.mock('../db/database', () => {
+  const tasks = [{ id: '1', title: 'Test Mock Task', priorityScore: 50 }];
+  return {
+    getDatabase: jest.fn().mockResolvedValue({
+      getAllAsync: jest.fn().mockResolvedValue(tasks),
+    }),
+    syncTasksFromServer: jest.fn().mockResolvedValue(tasks),
+  };
+});
 
 describe('TaskWidget Component', () => {
   it('renders correctly and shows offline SQLite tasks', async () => {
