@@ -1,0 +1,19 @@
+node_modules
+dist
+data
+*.log
+.env
+.env.*
+!.env.example
+# Debug / scraper artifacts
+*.png
+*.html
+cookies.txt
+m3u8_responses.txt
+network_requests.txt
+manifest_dump.html
+scratch*.ts
+test*.ts
+test*.cjs
+test*.js
+yt-dlp

@@ -33,16 +33,85 @@ jobs:
       with:
         node-version: '20'
         
-    - name: Install Dependencies
+    - name: Install Backend Dependencies
       working-directory: ./backend
       run: npm install
       
-    - name: Run Linter
+    - name: Run Backend Linter
       working-directory: ./backend
       run: npm run lint
       
-    - name: Run Unit Tests (Vitest)
+    - name: Apply DB schema (pgvector extension + migrations)
+      working-directory: ./backend
+      env:
+        DATABASE_URL: postgres://admin:password123@localhost:5432/life_planner
+      run: npm run db:migrate
+      
+    - name: Run Backend Unit Tests (Vitest)
       working-directory: ./backend
       env:
         DATABASE_URL: postgres://admin:password123@localhost:5432/life_planner
       run: npm run test
+
+    - name: Install admin-ui Dependencies
+      working-directory: ./admin-ui
+      run: npm install
+
+    - name: Run admin-ui Tests (Vitest)
+      working-directory: ./admin-ui
+      run: npm run test
+
+    - name: Install frontend Dependencies
+      working-directory: ./frontend
+      run: npm install --legacy-peer-deps
+
+    - name: Run frontend Tests (Jest)
+      working-directory: ./frontend
+      run: npm run test
+
+  # Build the backend image and publish it on passing main builds, then
+  # (optionally) deploy to the self-hosted server. Per docs/engineering_standards.md.
+  deploy:
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/backend:latest
+            ghcr.io/${{ github.repository }}/backend:${{ github.sha }}
+
+      # Deploy to the self-hosted box over SSH. Skipped automatically unless the
+      # DEPLOY_HOST secret is configured, so the pipeline stays green out of the box.
+      # (secrets can't be used in `if:` directly, so map it to env first.)
+      - name: Deploy to self-hosted server
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        if: env.DEPLOY_HOST != ''
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd ${{ secrets.DEPLOY_PATH }}
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            export BACKEND_IMAGE=ghcr.io/${{ github.repository }}/backend:latest
+            docker compose pull backend
+            docker compose up -d

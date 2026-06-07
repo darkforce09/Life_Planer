@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.test.ts",
+    "**/*.smoke.test.ts",
+    "src/scripts/debug-*.ts",
+    "src/debug-*.ts",
+    "src/analyze-html*.ts"
+  ]
+}

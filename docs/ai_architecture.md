@@ -16,7 +16,7 @@ Instead of using a single monolithic AI that tries to do everything, we will use
 - **Behavior:** Spawned by the Orchestrator to handle single, complex workflows (like the Ladok Exam Registration). It is given a specific prompt and access to specific MCP tools. Once the task is complete, it reports back and terminates.
 
 ## Model Context Protocol (MCP) Servers
-To safely give the agents access to our backend without hardcoding logic into the agent prompt, we will build custom local MCP servers. These servers expose our OOP TypeScript classes as callable tools.
+To safely give the agents access to our backend without hardcoding logic into the agent prompt, we will build custom local MCP servers. These servers expose our pure functional TypeScript modules as callable tools.
 
 ### 1. Database MCP Server (`mcp-postgres`)
 - **Purpose:** Gives the Orchestrator Agent controlled access to read/write the PostgreSQL database.
@@ -43,4 +43,4 @@ To safely give the agents access to our backend without hardcoding logic into th
 
 ## Security & Human-in-the-Loop Rules
 - **No Unapproved Actions:** All destructive actions (e.g., submitting an exam registration, sending an email) MUST require explicit user approval via the Face widget before the MCP tool executes the final commit.
-- **Strict Scoping:** The agents cannot run arbitrary bash commands. They can *only* call the specific tools exposed by the MCP servers, ensuring they only interact with the exact OOP classes we write.
+- **Strict Scoping:** The agents cannot run arbitrary bash commands. They can *only* call the specific tools exposed by the MCP servers, ensuring they only interact with the exact pure functional logic we write.
