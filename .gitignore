@@ -1,0 +1,63 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+cookies.txt
+*.pem
+
+# Embedded PGlite store (legacy; Postgres is now the source of truth)
+backend/data/
+
+# Logs
+*.log
+logs/
+
+# Debug + scraper artifacts
+*.png
+*.jpg
+*.jpeg
+backend/*.html
+backend/*-debug*.html
+backend/m3u8_responses.txt
+backend/network_requests.txt
+backend/manifest_dump.html
+backend/kaltura_dom.html
+backend/seamless*.html
+backend/seamless-html.txt
+backend/course-html.txt
+backend/yt-dlp
+
+# Local scratch / experiment scripts (not part of the app)
+backend/scratch*.ts
+backend/test.ts
+backend/test[0-9]*.ts
+backend/test-*.ts
+backend/test_*.ts
+backend/test-parser.cjs
+backend/test-pglite.js
+backend/check-db.ts
+backend/restore-db.ts
+backend/filter-logs.ts
+backend/migrate-exams.ts
+backend/run-ladok-test.ts
+backend/src/analyze-html*.ts
+backend/src/debug-*.ts
+backend/src/dump-cookies.ts
+CURSOR_HANDOVER.md
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Generated knowledge base (lives in the user's Documents folder, never in repo)
+Vector_KnowledgeBase/
+Vector_KnowledgeBase_State.json
+RefinementState.json
