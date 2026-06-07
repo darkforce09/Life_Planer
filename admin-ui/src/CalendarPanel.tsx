@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
-import { Calendar, MapPin } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { apiGet } from './api';
+import { GoogleCalendar } from './calendar/GoogleCalendar';
+import type { CalendarEvent } from './calendar/types';
+import { detectAllDay } from './calendar/utils';
 
-interface EventItem {
+interface ApiEvent {
   id: string;
   title: string;
   startTime: string;
@@ -11,63 +13,87 @@ interface EventItem {
   source: string;
 }
 
+interface ApiExam {
+  id: string;
+  title: string;
+  examDateTime: string | null;
+  examDate: string | null;
+  place: string | null;
+  courseCode: string | null;
+  courseName: string | null;
+}
+
+function toCalendarEvent(
+  id: string,
+  title: string,
+  start: Date,
+  end: Date,
+  location: string | null,
+  source: string,
+): CalendarEvent {
+  return { id, title, start, end, location, source, allDay: detectAllDay(start, end) };
+}
+
+function parseExamStart(exam: ApiExam): Date | null {
+  if (exam.examDateTime) {
+    const d = new Date(exam.examDateTime);
+    if (!isNaN(d.getTime())) return d;
+  }
+  if (exam.examDate) {
+    const iso = exam.examDate.match(/\d{4}-\d{2}-\d{2}/);
+    if (iso) {
+      const d = new Date(iso[0]);
+      if (!isNaN(d.getTime())) return d;
+    }
+  }
+  return null;
+}
+
 /**
- * Calendar/schedule surface for the ingested `events` table (TimeEdit, Outlook).
- * Groups upcoming events by day.
+ * Full calendar view (Google Calendar–style) for TimeEdit, Outlook, and Ladok exams.
  */
 export function CalendarPanel() {
-  const [events, setEvents] = useState<EventItem[]>([]);
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    apiGet<{ events: EventItem[] }>('/api/events')
-      .then((data) => setEvents(data.events || []))
-      .catch(() => setEvents([]))
-      .finally(() => setLoading(false));
+  const load = useCallback(async () => {
+    try {
+      const [eventsRes, examsRes] = await Promise.all([
+        apiGet<{ events: ApiEvent[] }>('/api/events'),
+        apiGet<{ exams: ApiExam[] }>('/api/ladok/exams').catch(() => ({ exams: [] })),
+      ]);
+
+      const fromEvents = (eventsRes.events || []).map((e) => {
+        const start = new Date(e.startTime);
+        const end = new Date(e.endTime);
+        return toCalendarEvent(e.id, e.title, start, end, e.location, e.source);
+      });
+
+      const fromExams = (examsRes.exams || [])
+        .map((exam) => {
+          const start = parseExamStart(exam);
+          if (!start) return null;
+          const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);
+          const title = exam.courseCode
+            ? `[Exam] ${exam.title} (${exam.courseCode})`
+            : `[Exam] ${exam.title}`;
+          return toCalendarEvent(`exam-${exam.id}`, title, start, end, exam.place, 'ladok');
+        })
+        .filter((e): e is CalendarEvent => e !== null);
+
+      setEvents([...fromEvents, ...fromExams]);
+    } catch {
+      setEvents([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  if (loading) return <div className="panel"><div className="muted">Loading calendar…</div></div>;
+  useEffect(() => {
+    load();
+    const interval = setInterval(load, 60_000);
+    return () => clearInterval(interval);
+  }, [load]);
 
-  if (events.length === 0) {
-    return (
-      <div className="panel">
-        <div className="muted">No events yet. Sync TimeEdit or Outlook to populate your schedule.</div>
-      </div>
-    );
-  }
-
-  // Group by date (YYYY-MM-DD).
-  const groups = new Map<string, EventItem[]>();
-  for (const e of [...events].sort((a, b) => +new Date(a.startTime) - +new Date(b.startTime))) {
-    const day = new Date(e.startTime).toLocaleDateString();
-    if (!groups.has(day)) groups.set(day, []);
-    groups.get(day)!.push(e);
-  }
-
-  return (
-    <div className="panel">
-      <div className="panel-header">
-        <h2 style={{ margin: 0 }}><Calendar size={18} /> Upcoming Schedule</h2>
-      </div>
-      {[...groups.entries()].map(([day, dayEvents]) => (
-        <div key={day} style={{ marginBottom: 20 }}>
-          <h3 style={{ marginBottom: 8, opacity: 0.8 }}>{day}</h3>
-          {dayEvents.map((e) => (
-            <div key={e.id} className="event-row" style={{ padding: 10, marginBottom: 6, background: 'rgba(255,255,255,0.03)', borderRadius: 8 }}>
-              <div style={{ fontWeight: 600 }}>{e.title}</div>
-              <div style={{ fontSize: 12, opacity: 0.7, display: 'flex', gap: 12, marginTop: 4 }}>
-                <span>
-                  {new Date(e.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  {' – '}
-                  {new Date(e.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
-                {e.location && <span><MapPin size={12} /> {e.location}</span>}
-                <span className="status-badge status-ok">{e.source}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      ))}
-    </div>
-  );
+  return <GoogleCalendar events={events} loading={loading} />;
 }

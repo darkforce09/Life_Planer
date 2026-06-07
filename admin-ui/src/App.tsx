@@ -548,7 +548,11 @@ function App() {
         </div>
 
         {currentView === 'RAG' && <RagPanel />}
-        {currentView === 'CALENDAR' && <CalendarPanel />}
+        {currentView === 'CALENDAR' && (
+          <div style={{ padding: '0 24px 24px', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+            <CalendarPanel />
+          </div>
+        )}
         {currentView === 'OPERATIONS' && <PipelineAlertsPanel />}
         {currentView === 'APPROVALS' && <ApprovalsPanel />}
         {currentView === 'AGENTS' && <AgentsPanel />}
