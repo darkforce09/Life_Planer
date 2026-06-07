@@ -21,7 +21,7 @@ async function main() {
       server.close();
       process.exit(0);
     } catch (e) {
-      logger.error('Failed to hit API', e);
+      logger.error({ err: e }, 'Failed to hit API');
       server.close();
       process.exit(1);
     }

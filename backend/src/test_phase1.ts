@@ -2,7 +2,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
 import { users, courses, tasks } from './db/schema.js';
-import { PrioritizationEngine } from './engine/PrioritizationEngine.js';
+import { calculateScore } from './engine/PrioritizationEngine.js';
 import { logger } from './utils/logger.js';
 import path from 'path';
 
@@ -35,11 +35,11 @@ async function main() {
   const mockDeadline = new Date();
   mockDeadline.setHours(mockDeadline.getHours() + 12); // Due in 12 hours
   
-  const score = PrioritizationEngine.calculateScore({
+  const score = calculateScore({
     id: 'mock-1',
     deadline: mockDeadline,
     impactScore: 8 // High impact
-  });
+  }, { currentDate: new Date(), passedModuleCodes: [] });
   
   logger.info(`Calculated Priority Score: ${score} (Expected high score due to 12h deadline and high impact)`);
   
