@@ -9,7 +9,7 @@ import { draftApologyEmail } from '../agents/EmailAgent.js';
 import { generateGuide } from '../agents/StudyGuideAgent.js';
 import { db } from '../db/index.js';
 import { tasks, users } from '../db/schema.js';
-import { desc, lt } from 'drizzle-orm';
+import { and, desc, eq, lt } from 'drizzle-orm';
 import { getSensorConfig } from '../db/sensorConfigStore.js';
 import { PipelineRun, PipelineLockedError } from '../engine/PipelineRunService.js';
 import { runOrchestrator } from '../agents/Orchestrator.js';
@@ -40,6 +40,8 @@ export async function runSystemCycle(): Promise<void> {
     }
     throw error;
   }
+
+  let sensorError: unknown = null;
 
   try {
     // --- 1. SENSORS (Data Ingestion) ---
@@ -84,6 +86,9 @@ export async function runSystemCycle(): Promise<void> {
       await recalculateAllTasksPriorities();
     });
   } catch (error) {
+    // Continue into the agent stage for resilience, but remember the failure
+    // so the run is not reported as completed.
+    sensorError = error;
     logger.error({ err: error }, '[CRON] Sensor sync failed');
   }
 
@@ -91,7 +96,10 @@ export async function runSystemCycle(): Promise<void> {
   try {
     await run.stage('agents', async () => {
       const now = new Date();
-      const missedTasks = await db.select().from(tasks).where(lt(tasks.deadline, now));
+      const missedTasks = await db
+        .select()
+        .from(tasks)
+        .where(and(lt(tasks.deadline, now), eq(tasks.isCompleted, false)));
 
       for (const task of missedTasks) {
         if ((task.priorityScore ?? 0) > 80) {
@@ -118,7 +126,11 @@ export async function runSystemCycle(): Promise<void> {
       });
     }
 
-    await run.finish();
+    if (sensorError) {
+      await run.fail(sensorError);
+    } else {
+      await run.finish();
+    }
   } catch (error) {
     logger.error({ err: error }, '[CRON] Agent execution failed');
     await run.fail(error);

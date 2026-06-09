@@ -4,6 +4,7 @@ import { startApiServer } from './api/index.js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { db, ensureExtensions } from './db/index.js';
 import { startSensorCron } from './cron/SensorRunner.js';
+import { clearStaleRuns } from './engine/PipelineRunService.js';
 
 async function bootstrap() {
   logger.info('Initializing Automated Uni Tracker Backend...');
@@ -11,6 +12,7 @@ async function bootstrap() {
   await ensureExtensions();
   logger.info('Running database migrations...');
   await migrate(db, { migrationsFolder: './drizzle' });
+  await clearStaleRuns();
   logger.info('Brain Foundation systems online.');
 
   // Start the REST API

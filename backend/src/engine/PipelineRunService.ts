@@ -113,3 +113,25 @@ export class PipelineRun {
 export async function getRecentPipelineRuns(limit = 20) {
   return db.select().from(pipelineRuns).orderBy(desc(pipelineRuns.startedAt)).limit(limit);
 }
+
+/**
+ * Marks any runs still flagged 'running' as failed. Called once at startup:
+ * if the process crashed or was killed mid-run, the orphaned row would
+ * otherwise hold the run-lock forever and block every future pipeline.
+ */
+export async function clearStaleRuns(): Promise<void> {
+  const stale = await db
+    .update(pipelineRuns)
+    .set({
+      status: 'failed',
+      finishedAt: new Date(),
+      currentStage: null,
+      error: 'Marked stale at startup: backend restarted while this run was in progress.',
+    })
+    .where(eq(pipelineRuns.status, 'running'))
+    .returning({ id: pipelineRuns.id, type: pipelineRuns.type });
+
+  for (const run of stale) {
+    logger.warn(`[PIPELINE] Cleared stale run ${run.id} (${run.type}) left over from a previous process.`);
+  }
+}

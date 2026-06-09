@@ -13,20 +13,24 @@ function authHeaders(): Record<string, string> {
 
 /**
  * Thin fetch wrapper that prefixes the base URL and attaches the auth token.
- * Accepts a path beginning with '/'.
+ * Accepts a path beginning with '/'. Throws on HTTP error status so callers'
+ * try/catch failure handling fires instead of reporting false success.
  */
-export function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const headers = {
     ...(init.body ? { 'Content-Type': 'application/json' } : {}),
     ...authHeaders(),
     ...(init.headers as Record<string, string> | undefined),
   };
-  return fetch(`${API_BASE_URL}${path}`, { ...init, headers });
+  const res = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
+  if (!res.ok) {
+    throw new Error(`${init.method || 'GET'} ${path} failed: ${res.status}`);
+  }
+  return res;
 }
 
 export async function apiGet<T = any>(path: string): Promise<T> {
   const res = await apiFetch(path);
-  if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
   return res.json();
 }
 
@@ -35,6 +39,5 @@ export async function apiPost<T = any>(path: string, body?: unknown): Promise<T>
     method: 'POST',
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
-  if (!res.ok) throw new Error(`POST ${path} failed: ${res.status}`);
   return res.json();
 }

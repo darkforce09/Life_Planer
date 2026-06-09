@@ -117,10 +117,16 @@ export function layoutDayEvents(
   const positioned: PositionedEvent[] = [];
   const columns: { end: number }[] = [];
 
+  const dayStartMin = dayStartHour * 60;
+  const dayEndMin = HOUR_END * 60;
+
   for (const event of sorted) {
-    const startMin = event.start.getHours() * 60 + event.start.getMinutes();
-    const endMin = event.end.getHours() * 60 + event.end.getMinutes();
-    const dayStartMin = dayStartHour * 60;
+    // Clamp to the visible grid so events outside 7 AM–10 PM render at the
+    // edge instead of off-grid (negative top / overflowing the column).
+    const rawStart = event.start.getHours() * 60 + event.start.getMinutes();
+    const rawEnd = event.end.getHours() * 60 + event.end.getMinutes();
+    const startMin = Math.min(Math.max(rawStart, dayStartMin), dayEndMin - 15);
+    const endMin = Math.min(Math.max(rawEnd, startMin + 15), dayEndMin);
     const top = ((startMin - dayStartMin) / 60) * hourHeight;
     const height = Math.max(((endMin - startMin) / 60) * hourHeight, 22);
 

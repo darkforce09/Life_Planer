@@ -57,36 +57,32 @@ export function CalendarPanel() {
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    try {
-      const [eventsRes, examsRes] = await Promise.all([
-        apiGet<{ events: ApiEvent[] }>('/api/events'),
-        apiGet<{ exams: ApiExam[] }>('/api/ladok/exams').catch(() => ({ exams: [] })),
-      ]);
+    // Each source fails independently so a broken endpoint doesn't blank the calendar.
+    const [eventsRes, examsRes] = await Promise.all([
+      apiGet<{ events: ApiEvent[] }>('/api/events').catch(() => ({ events: [] as ApiEvent[] })),
+      apiGet<{ exams: ApiExam[] }>('/api/ladok/exams').catch(() => ({ exams: [] as ApiExam[] })),
+    ]);
 
-      const fromEvents = (eventsRes.events || []).map((e) => {
-        const start = new Date(e.startTime);
-        const end = new Date(e.endTime);
-        return toCalendarEvent(e.id, e.title, start, end, e.location, e.source);
-      });
+    const fromEvents = (eventsRes.events || []).map((e) => {
+      const start = new Date(e.startTime);
+      const end = new Date(e.endTime);
+      return toCalendarEvent(e.id, e.title, start, end, e.location, e.source);
+    });
 
-      const fromExams = (examsRes.exams || [])
-        .map((exam) => {
-          const start = parseExamStart(exam);
-          if (!start) return null;
-          const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);
-          const title = exam.courseCode
-            ? `[Exam] ${exam.title} (${exam.courseCode})`
-            : `[Exam] ${exam.title}`;
-          return toCalendarEvent(`exam-${exam.id}`, title, start, end, exam.place, 'ladok');
-        })
-        .filter((e): e is CalendarEvent => e !== null);
+    const fromExams = (examsRes.exams || [])
+      .map((exam) => {
+        const start = parseExamStart(exam);
+        if (!start) return null;
+        const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);
+        const title = exam.courseCode
+          ? `[Exam] ${exam.title} (${exam.courseCode})`
+          : `[Exam] ${exam.title}`;
+        return toCalendarEvent(`exam-${exam.id}`, title, start, end, exam.place, 'ladok');
+      })
+      .filter((e): e is CalendarEvent => e !== null);
 
-      setEvents([...fromEvents, ...fromExams]);
-    } catch {
-      setEvents([]);
-    } finally {
-      setLoading(false);
-    }
+    setEvents([...fromEvents, ...fromExams]);
+    setLoading(false);
   }, []);
 
   useEffect(() => {
